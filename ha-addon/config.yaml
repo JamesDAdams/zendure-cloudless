@@ -9,6 +9,7 @@ arch:
   - armhf
   - armv7
   - i386
+image: "ghcr.io/jamesdadams/zendure-cloudless-{arch}"
 ports:
   3001/tcp: 3001
 ports_description:
