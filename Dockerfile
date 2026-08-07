@@ -1,21 +1,26 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
 COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
-RUN npm install --workspace=backend --workspace=frontend
+
+RUN apk add --no-cache python3 make g++ \
+    && npm install --workspace=backend --workspace=frontend
 
 COPY frontend ./frontend
 RUN npm run build --workspace=frontend
 
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 COPY package*.json ./
 COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
-RUN npm install --workspace=backend --omit=dev
+
+RUN apk add --no-cache python3 make g++ \
+    && npm install --workspace=backend --omit=dev \
+    && apk del python3 make g++
 
 COPY backend ./backend
 COPY --from=builder /app/frontend/dist ./frontend/dist
