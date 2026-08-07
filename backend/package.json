@@ -1,0 +1,19 @@
+{
+  "name": "zendure-cloudless-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test --experimental-vm-modules test/**/*.test.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "better-sqlite3": "^13.0.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "mqtt": "^5.8.1",
+    "node-cron": "^3.0.3",
+    "ws": "^8.17.1"
+  }
+}

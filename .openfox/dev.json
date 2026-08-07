@@ -1,0 +1,4 @@
+{
+  "command": "npm run dev --workspace=backend & npm run dev --workspace=frontend",
+  "url": "http://localhost:5173"
+}

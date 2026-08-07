@@ -1,0 +1,152 @@
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import { ZendureDevice } from '../src/adapters/ZendureDevice.js'
+import { mqttService } from '../src/services/mqttService.js'
+
+describe('ZendureDevice.applyMqttMessage', () => {
+  it('parses properties and updates state', () => {
+    const device = new ZendureDevice({ id: 'd1', name: 'Test', ip: '127.0.0.1' })
+    const payload = JSON.stringify({
+      properties: { solarInputPower: 800, outputHomePower: 95, electricLevel: 44 },
+      packData: [{ sn: 'PACK1', socLevel: 44, state: 2, power: 76, maxTemp: 3000, totalVol: 4900 }]
+    })
+    device.applyMqttMessage('some/topic', Buffer.from(payload))
+    const state = device.getState()
+    assert.equal(state.solarInputPower, 800)
+    assert.equal(state.outputHomePower, 95)
+    assert.equal(state.electricLevel, 44)
+    assert.equal(state.packs.length, 1)
+    assert.equal(state.packs[0].sn, 'PACK1')
+  })
+
+  it('ignores invalid JSON payload silently', () => {
+    const device = new ZendureDevice({ id: 'd2', name: 'Test', ip: '127.0.0.1' })
+    assert.doesNotThrow(() => device.applyMqttMessage('topic', Buffer.from('not json')))
+  })
+})
+
+describe('ZendureDevice MQTT Publishing', () => {
+  it('includes mqttPublishEnabled in toJSON', () => {
+    const device = new ZendureDevice({
+      id: 'd3',
+      name: 'SolarFlow 800',
+      ip: '192.168.1.100',
+      mqttPublishEnabled: true
+    })
+    const json = device.toJSON()
+    assert.equal(json.mqttPublishEnabled, true)
+  })
+
+  it('publishes state to MQTT under zendure-cloudless-slug/state topic when mqttPublishEnabled is true', async () => {
+    const device = new ZendureDevice({
+      id: 'd4',
+      name: 'SolarFlow 800',
+      ip: '192.168.1.100',
+      mqttPublishEnabled: true
+    })
+
+    const published = []
+    const originalPublish = mqttService.publish
+    mqttService.publish = (topic, payload, options) => {
+      published.push({ topic, payload, options })
+      return true
+    }
+
+    try {
+      device.publishMqttDiscovery()
+      assert.ok(published.length > 0)
+      const solarConfig = published.find((p) => p.topic.includes('solarPower/config'))
+      assert.ok(solarConfig)
+      assert.equal(solarConfig.payload.state_topic, 'zendure-cloudless-solarflow-800/state')
+      assert.equal(solarConfig.payload.device_class, 'power')
+
+      const solarEnergyConfig = published.find((p) => p.topic.includes('solarEnergyKwh/config'))
+      assert.ok(solarEnergyConfig)
+      assert.equal(solarEnergyConfig.payload.device_class, 'energy')
+      assert.equal(solarEnergyConfig.payload.state_class, 'total_increasing')
+
+      const chargeEnergyConfig = published.find((p) => p.topic.includes('batteryChargeEnergyKwh/config'))
+      assert.ok(chargeEnergyConfig)
+      assert.equal(chargeEnergyConfig.payload.device_class, 'energy')
+      assert.equal(chargeEnergyConfig.payload.state_class, 'total_increasing')
+
+      const dischargeEnergyConfig = published.find((p) => p.topic.includes('batteryDischargeEnergyKwh/config'))
+      assert.ok(dischargeEnergyConfig)
+      assert.equal(dischargeEnergyConfig.payload.device_class, 'energy')
+      assert.equal(dischargeEnergyConfig.payload.state_class, 'total_increasing')
+    } finally {
+      mqttService.publish = originalPublish
+    }
+  })
+
+  it('includes solar, charge, and discharge energy totals in telemetry state published to MQTT', () => {
+    const device = new ZendureDevice({
+      id: 'd5',
+      name: 'SolarFlow 800',
+      ip: '192.168.1.100',
+      mqttPublishEnabled: true
+    })
+
+    const published = []
+    const originalPublish = mqttService.publish
+    mqttService.publish = (topic, payload, options) => {
+      published.push({ topic, payload, options })
+      return true
+    }
+
+    try {
+      const payload = JSON.stringify({
+        properties: { solarInputPower: 500, outputPackPower: 300, packInputPower: 0, electricLevel: 50 },
+        packData: [{ sn: 'PACK1', socLevel: 50, state: 1, power: 300, maxTemp: 3000, totalVol: 4900 }]
+      })
+      device.applyMqttMessage('some/topic', Buffer.from(payload))
+
+      const stateMsg = published.find((p) => p.topic === 'zendure-cloudless-solarflow-800/state')
+      assert.ok(stateMsg, 'Expected state message published to zendure-cloudless-solarflow-800/state')
+      assert.notEqual(stateMsg.payload.solarEnergyKwh, undefined)
+      assert.notEqual(stateMsg.payload.batteryChargeEnergyKwh, undefined)
+      assert.notEqual(stateMsg.payload.batteryDischargeEnergyKwh, undefined)
+      assert.equal(stateMsg.payload.electricLevel, 50)
+      assert.equal(stateMsg.payload.batterySoc, 50)
+      assert.equal(stateMsg.payload.soc, 50)
+    } finally {
+      mqttService.publish = originalPublish
+    }
+  })
+
+  it('computes battery SOC from pack average when electricLevel is missing', () => {
+    const device = new ZendureDevice({
+      id: 'd6',
+      name: 'SolarFlow 800 Plus',
+      ip: '192.168.1.100',
+      mqttPublishEnabled: true
+    })
+
+    const published = []
+    const originalPublish = mqttService.publish
+    mqttService.publish = (topic, payload, options) => {
+      published.push({ topic, payload, options })
+      return true
+    }
+
+    try {
+      const payload = JSON.stringify({
+        properties: { solarInputPower: 400 },
+        packData: [
+          { sn: 'PACK1', socLevel: 60, state: 1, power: 200 },
+          { sn: 'PACK2', socLevel: 80, state: 1, power: 200 }
+        ]
+      })
+      device.applyMqttMessage('some/topic', Buffer.from(payload))
+
+      const stateMsg = published.find((p) => p.topic === 'zendure-cloudless-solarflow-800-plus/state')
+      assert.ok(stateMsg)
+      assert.equal(stateMsg.payload.electricLevel, 70)
+      assert.equal(stateMsg.payload.batterySoc, 70)
+      assert.equal(stateMsg.payload.soc, 70)
+    } finally {
+      mqttService.publish = originalPublish
+    }
+  })
+})
+

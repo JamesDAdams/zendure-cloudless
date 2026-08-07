@@ -1,0 +1,7 @@
+node_modules/
+frontend/dist/
+backend/data/
+data/
+*.log
+.DS_Store
+diff.txt

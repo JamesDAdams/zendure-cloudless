@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #0F1117;
+  color: #E0E2EE;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #1A1D26; }
+::-webkit-scrollbar-thumb { background: #3B4A44; border-radius: 3px; }
+
+@keyframes dashFlow {
+  to { stroke-dashoffset: -20; }
+}
