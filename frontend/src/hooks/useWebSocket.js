@@ -7,7 +7,11 @@ export function useWebSocket() {
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${protocol}://${window.location.host}/ws`
+    const initialPath = window.location.pathname.endsWith('/')
+      ? window.location.pathname
+      : window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1)
+    const cleanPath = (initialPath + 'ws').replace(/\/+/g, '/')
+    const url = `${protocol}://${window.location.host}${cleanPath}`
     let ws
     let retryTimer
 
