@@ -1,4 +1,7 @@
+import { initLogger } from './utils/logger.js'
 import express from 'express'
+
+initLogger()
 import cors from 'cors'
 import { createServer } from 'http'
 import { WebSocketServer } from 'ws'

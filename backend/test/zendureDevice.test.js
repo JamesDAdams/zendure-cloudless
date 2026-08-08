@@ -148,5 +148,82 @@ describe('ZendureDevice MQTT Publishing', () => {
       mqttService.publish = originalPublish
     }
   })
+
+  it('converts hyperTmp Kelvin tenth to Celsius in normalized state (e.g. 2971 -> 24.0)', () => {
+    const device = new ZendureDevice({ id: 'd7', name: 'Test Temp', ip: '127.0.0.1' })
+    const payload = JSON.stringify({
+      properties: { hyperTmp: 2971 }
+    })
+    device.applyMqttMessage('some/topic', Buffer.from(payload))
+    const state = device.getState()
+    assert.equal(state.hyperTmp, 24.0)
+    assert.equal(state.deviceTemp, 24.0)
+  })
+
+  it('preserves existing metrics during partial MQTT/REST updates instead of resetting to zero', () => {
+    const device = new ZendureDevice({ id: 'd8', name: 'Test Partial', ip: '127.0.0.1' })
+    
+    // First full report
+    const fullPayload = JSON.stringify({
+      properties: {
+        solarInputPower: 500,
+        outputHomePower: 150,
+        outputPackPower: 100,
+        packInputPower: 0,
+        electricLevel: 75,
+        hyperTmp: 2971,
+        minSoc: 50,
+        socSet: 900
+      },
+      packData: [{ sn: 'PACK1', socLevel: 75, state: 1, power: 100 }]
+    })
+    device.applyMqttMessage('some/topic', Buffer.from(fullPayload))
+    let state = device.getState()
+    assert.equal(state.solarInputPower, 500)
+    assert.equal(state.outputHomePower, 150)
+    assert.equal(state.electricLevel, 75)
+    assert.equal(state.hyperTmp, 24.0)
+    assert.equal(state.packs.length, 1)
+
+    // Second report with only solarInputPower updated
+    const partialPayload = JSON.stringify({
+      properties: { solarInputPower: 550 }
+    })
+    device.applyMqttMessage('some/topic', Buffer.from(partialPayload))
+    state = device.getState()
+
+    assert.equal(state.solarInputPower, 550)
+    assert.equal(state.outputHomePower, 150)
+    assert.equal(state.batteryChargePower, 100)
+    assert.equal(state.electricLevel, 75)
+    assert.equal(state.hyperTmp, 24.0)
+    assert.equal(state.packs.length, 1)
+  })
+
+  it('publishes status entities without state_class for Home Assistant Activity log', () => {
+    const device = new ZendureDevice({
+      id: 'd9',
+      name: 'SolarFlow 800 Status',
+      ip: '192.168.1.100',
+      mqttPublishEnabled: true
+    })
+
+    const published = []
+    const originalPublish = mqttService.publish
+    mqttService.publish = (topic, payload, options) => {
+      published.push({ topic, payload, options })
+      return true
+    }
+
+    try {
+      device.publishMqttDiscovery()
+      const batteryStateConfig = published.find((p) => p.topic.includes('batteryState/config'))
+      assert.ok(batteryStateConfig, 'Expected batteryState discovery topic')
+      assert.equal(batteryStateConfig.payload.state_class, undefined)
+      assert.equal(batteryStateConfig.payload.value_template, '{{ value_json.batteryState }}')
+    } finally {
+      mqttService.publish = originalPublish
+    }
+  })
 })
 

@@ -26,6 +26,10 @@ const SENSORS = [
   { key: 'hyperTmp', name: 'Temperature', unit: '°C', device_class: 'temperature', state_class: 'measurement' },
   { key: 'minSoc', name: 'Min SOC', unit: '%', device_class: 'battery', entity_category: 'diagnostic' },
   { key: 'socSet', name: 'Target SOC', unit: '%', device_class: 'battery', entity_category: 'diagnostic' },
+  { key: 'batteryState', name: 'Battery State' },
+  { key: 'packState', name: 'Pack State', entity_category: 'diagnostic' },
+  { key: 'gridState', name: 'Grid State', entity_category: 'diagnostic' },
+  { key: 'acStatus', name: 'AC Status', entity_category: 'diagnostic' },
 ]
 
 function slugify(text) {
@@ -61,22 +65,30 @@ export class ZendureDevice extends BaseDevice {
   }
 
   processReport(raw) {
+    const prevState = this.state || {}
     const props = raw.properties || {}
-    const packs = raw.packData || []
+    const packs = raw.packData
 
-    const normalizedPacks = packs.map((p) => ({
-      sn: p.sn,
-      socLevel: p.socLevel ?? 0,
-      state: p.state ?? 0,
-      power: p.power ?? 0,
-      maxTemp: p.maxTemp ? parseFloat(((p.maxTemp - 2731) / 10).toFixed(1)) : 0,
-      totalVol: p.totalVol ?? 0,
-      packType: p.packType ?? 0,
-      capacityKwh: packCapacityKwh(p.sn),
-    }))
+    const normalizedPacks = Array.isArray(packs)
+      ? packs.map((p) => ({
+          sn: p.sn,
+          socLevel: p.socLevel ?? 0,
+          state: p.state ?? 0,
+          power: p.power ?? 0,
+          maxTemp: p.maxTemp ? parseFloat(((p.maxTemp - 2731) / 10).toFixed(1)) : 0,
+          totalVol: p.totalVol ?? 0,
+          packType: p.packType ?? 0,
+          capacityKwh: packCapacityKwh(p.sn),
+        }))
+      : (prevState.packs || [])
 
-    const minSocPct = parseFloat(((props.minSoc ?? 0) / 10).toFixed(1))
-    const socSetPct = parseFloat(((props.socSet ?? 1000) / 10).toFixed(1))
+    const minSocPct = props.minSoc !== undefined
+      ? parseFloat(((props.minSoc) / 10).toFixed(1))
+      : (prevState.minSoc ?? 0)
+
+    const socSetPct = props.socSet !== undefined
+      ? parseFloat(((props.socSet) / 10).toFixed(1))
+      : (prevState.socSet ?? 100)
 
     const packAverageSoc = normalizedPacks.length > 0
       ? Math.round(normalizedPacks.reduce((s, p) => s + (p.socLevel ?? 0), 0) / normalizedPacks.length)
@@ -84,38 +96,64 @@ export class ZendureDevice extends BaseDevice {
 
     const electricLevel = (props.electricLevel != null && props.electricLevel > 0)
       ? props.electricLevel
-      : (props.socLevel ?? props.electric_level ?? packAverageSoc)
+      : (props.socLevel ?? props.electric_level ?? (normalizedPacks.length > 0 ? packAverageSoc : (prevState.electricLevel ?? 0)))
 
-    const totalCapacityKwh = parseFloat(normalizedPacks.reduce((s, p) => s + p.capacityKwh, 0).toFixed(2))
+    const totalCapacityKwh = normalizedPacks.length > 0
+      ? parseFloat(normalizedPacks.reduce((s, p) => s + p.capacityKwh, 0).toFixed(2))
+      : (prevState.totalCapacityKwh ?? 0)
+
     const availableEnergyKwh = parseFloat((Math.max(0, electricLevel - minSocPct) / 100 * totalCapacityKwh).toFixed(2))
 
-    const chargePower = props.outputPackPower ?? 0
-    const dischargePower = props.packInputPower ?? 0
+    const chargePower = props.outputPackPower !== undefined
+      ? props.outputPackPower
+      : (prevState.batteryChargePower ?? prevState.outputPackPower ?? 0)
+
+    const dischargePower = props.packInputPower !== undefined
+      ? props.packInputPower
+      : (prevState.batteryDischargePower ?? prevState.packInputPower ?? 0)
+
+    const solarPower = props.solarInputPower !== undefined
+      ? props.solarInputPower
+      : (prevState.solarInputPower ?? prevState.solarPower ?? 0)
+
+    const outputHomePower = props.outputHomePower !== undefined
+      ? props.outputHomePower
+      : (prevState.outputHomePower ?? 0)
+
+    const gridInputPower = props.gridInputPower !== undefined
+      ? props.gridInputPower
+      : (prevState.gridInputPower ?? 0)
+
     let batteryState = 'Idle'
     if (chargePower > 0) batteryState = 'Charging'
     else if (dischargePower > 0) batteryState = 'Discharging'
 
-    const rawVol = props.BatVolt ?? (normalizedPacks[0]?.totalVol ?? 0)
-    const batteryVoltage = rawVol > 0 ? parseFloat((rawVol / 100).toFixed(2)) : 0
+    const rawVol = props.BatVolt !== undefined ? props.BatVolt : (Array.isArray(packs) ? normalizedPacks[0]?.totalVol : undefined)
+    const batteryVoltage = rawVol !== undefined
+      ? (rawVol > 0 ? parseFloat((rawVol / 100).toFixed(2)) : 0)
+      : (prevState.batteryVoltage ?? 0)
 
-    const rawTmp = props.hyperTmp ?? 0
-    const deviceTemp = rawTmp > 0 ? parseFloat(((rawTmp - 2731) / 10).toFixed(1)) : 0
+    const rawTmp = props.hyperTmp
+    const deviceTemp = rawTmp !== undefined
+      ? (rawTmp > 0 ? parseFloat(((rawTmp - 2731) / 10).toFixed(1)) : 0)
+      : (prevState.hyperTmp ?? prevState.deviceTemp ?? 0)
 
-    const remainInputTime = props.remainInputTime ?? 0
-    const remainOutTime = props.remainOutTime ?? 0
+    const remainInputTime = props.remainInputTime ?? prevState.remainInputTime ?? 0
+    const remainOutTime = props.remainOutTime ?? prevState.remainOutTime ?? 0
 
     const normalized = {
+      ...prevState,
       ...props,
-      sn: raw.sn,
-      product: raw.product,
-      solarPower: props.solarInputPower ?? 0,
-      solarInputPower: props.solarInputPower ?? 0,
-      solarPower1: props.solarPower1 ?? 0,
-      solarPower2: props.solarPower2 ?? 0,
-      outputHomePower: props.outputHomePower ?? 0,
+      sn: raw.sn ?? prevState.sn,
+      product: raw.product ?? prevState.product,
+      solarPower,
+      solarInputPower: solarPower,
+      solarPower1: props.solarPower1 ?? prevState.solarPower1 ?? 0,
+      solarPower2: props.solarPower2 ?? prevState.solarPower2 ?? 0,
+      outputHomePower,
       outputPackPower: chargePower,
       packInputPower: dischargePower,
-      gridInputPower: props.gridInputPower ?? 0,
+      gridInputPower,
       electricLevel,
       batterySoc: electricLevel,
       soc: electricLevel,
@@ -127,48 +165,49 @@ export class ZendureDevice extends BaseDevice {
       batteryDischargePower: dischargePower,
       batteryPower: -(chargePower) + dischargePower,
       batteryState,
-      packState: props.packState ?? 0,
+      packState: props.packState ?? prevState.packState ?? 0,
       remainOutTime,
       remainInputTime,
-      outputLimit: props.outputLimit ?? 0,
-      inputLimit: props.inputLimit ?? 1000,
+      outputLimit: props.outputLimit ?? prevState.outputLimit ?? 0,
+      inputLimit: props.inputLimit ?? prevState.inputLimit ?? 1000,
       minSoc: minSocPct,
       socSet: socSetPct,
-      smartMode: props.smartMode ?? 0,
-      inverseMaxPower: props.inverseMaxPower ?? 800,
-      acStatus: props.acStatus ?? 0,
-      dcStatus: props.dcStatus ?? 0,
-      gridState: props.gridState ?? 0,
-      pvStatus: props.pvStatus ?? 0,
-      IOTState: props.IOTState ?? 0,
+      smartMode: props.smartMode ?? prevState.smartMode ?? 0,
+      inverseMaxPower: props.inverseMaxPower ?? prevState.inverseMaxPower ?? 800,
+      acStatus: props.acStatus ?? prevState.acStatus ?? 0,
+      dcStatus: props.dcStatus ?? prevState.dcStatus ?? 0,
+      gridState: props.gridState ?? prevState.gridState ?? 0,
+      pvStatus: props.pvStatus ?? prevState.pvStatus ?? 0,
+      IOTState: props.IOTState ?? prevState.IOTState ?? 0,
+      hyperTmp: deviceTemp,
       deviceTemp,
-      reverseState: props.reverseState ?? 0,
-      gridStandard: props.gridStandard ?? 0,
-      chargeMaxLimit: props.chargeMaxLimit ?? 0,
-      phaseSwitch: props.phaseSwitch ?? 0,
-      batCalTime: props.batCalTime ?? 0,
-      socCompSwitch: props.socCompSwitch ?? 0,
-      rssi: props.rssi ?? 0,
-      switchCnt: props.switchCnt ?? 0,
-      bindstate: props.bindstate ?? 0,
-      voltWakeup: props.voltWakeup ?? 0,
-      isError: props.is_error ?? 0,
-      aiState: props.aiState ?? 0,
-      factoryModeState: props.factoryModeState ?? 0,
-      OTAState: props.OTAState ?? 0,
-      net: props.net ?? 0,
-      dataReady: props.dataReady ?? 0,
-      localAPIEnable: props.localAPIEnable ?? 0,
-      writeRsp: props.writeRsp ?? 0,
-      heatState: props.heatState ?? 0,
-      lampSwitch: props.lampSwitch ?? 0,
-      pass: props.pass ?? 0,
-      socLimit: props.socLimit ?? 0,
-      socStatus: props.socStatus ?? 0,
-      faultLevel: props.faultLevel ?? 0,
-      oldMode: props.oldMode ?? 0,
-      gridReverse: props.gridReverse ?? 0,
-      acMode: props.acMode ?? 0,
+      reverseState: props.reverseState ?? prevState.reverseState ?? 0,
+      gridStandard: props.gridStandard ?? prevState.gridStandard ?? 0,
+      chargeMaxLimit: props.chargeMaxLimit ?? prevState.chargeMaxLimit ?? 0,
+      phaseSwitch: props.phaseSwitch ?? prevState.phaseSwitch ?? 0,
+      batCalTime: props.batCalTime ?? prevState.batCalTime ?? 0,
+      socCompSwitch: props.socCompSwitch ?? prevState.socCompSwitch ?? 0,
+      rssi: props.rssi ?? prevState.rssi ?? 0,
+      switchCnt: props.switchCnt ?? prevState.switchCnt ?? 0,
+      bindstate: props.bindstate ?? prevState.bindstate ?? 0,
+      voltWakeup: props.voltWakeup ?? prevState.voltWakeup ?? 0,
+      isError: props.is_error ?? props.isError ?? prevState.isError ?? 0,
+      aiState: props.aiState ?? prevState.aiState ?? 0,
+      factoryModeState: props.factoryModeState ?? prevState.factoryModeState ?? 0,
+      OTAState: props.OTAState ?? prevState.OTAState ?? 0,
+      net: props.net ?? prevState.net ?? 0,
+      dataReady: props.dataReady ?? prevState.dataReady ?? 0,
+      localAPIEnable: props.localAPIEnable ?? prevState.localAPIEnable ?? 0,
+      writeRsp: props.writeRsp ?? prevState.writeRsp ?? 0,
+      heatState: props.heatState ?? prevState.heatState ?? 0,
+      lampSwitch: props.lampSwitch ?? prevState.lampSwitch ?? 0,
+      pass: props.pass ?? prevState.pass ?? 0,
+      socLimit: props.socLimit ?? prevState.socLimit ?? 0,
+      socStatus: props.socStatus ?? prevState.socStatus ?? 0,
+      faultLevel: props.faultLevel ?? prevState.faultLevel ?? 0,
+      oldMode: props.oldMode ?? prevState.oldMode ?? 0,
+      gridReverse: props.gridReverse ?? prevState.gridReverse ?? 0,
+      acMode: props.acMode ?? prevState.acMode ?? 0,
       packs: normalizedPacks,
     }
 
@@ -185,7 +224,7 @@ export class ZendureDevice extends BaseDevice {
       this.publishMqttDiscovery()
       const slug = slugify(this.name || normalized.sn || this.id)
       const stateTopic = `zendure-cloudless-${slug}/state`
-      mqttService.publish(stateTopic, normalized)
+      mqttService.publish(stateTopic, normalized, { retain: true })
     }
     return normalized
   }
@@ -214,6 +253,7 @@ export class ZendureDevice extends BaseDevice {
         device_class: sensor.device_class,
         state_class: sensor.state_class,
         entity_category: sensor.entity_category,
+        icon: sensor.icon,
         device: deviceObj,
       }
       mqttService.publish(discoveryTopic, payload, { retain: true })
