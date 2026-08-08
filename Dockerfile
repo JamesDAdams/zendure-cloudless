@@ -20,7 +20,6 @@ COPY package*.json ./
 COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/backend/node_modules ./backend/node_modules
 COPY backend ./backend
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
