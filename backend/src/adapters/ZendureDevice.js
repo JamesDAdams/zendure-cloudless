@@ -59,6 +59,10 @@ export class ZendureDevice extends BaseDevice {
     this.mqttTopicPrefix = config.mqttTopicPrefix || null
   }
 
+  getMqttSlug() {
+    return slugify(this.name || this.id)
+  }
+
   async fetchRest() {
     const res = await axios.get(`http://${this.ip}/properties/report`, { timeout: 5000 })
     return this.processReport(res.data)
@@ -90,13 +94,21 @@ export class ZendureDevice extends BaseDevice {
       ? parseFloat(((props.socSet) / 10).toFixed(1))
       : (prevState.socSet ?? 100)
 
-    const packAverageSoc = normalizedPacks.length > 0
-      ? Math.round(normalizedPacks.reduce((s, p) => s + (p.socLevel ?? 0), 0) / normalizedPacks.length)
+    const validPackSocs = normalizedPacks.filter((p) => p.socLevel != null)
+    const packAverageSoc = validPackSocs.length > 0
+      ? Math.round(validPackSocs.reduce((s, p) => s + p.socLevel, 0) / validPackSocs.length)
       : 0
 
-    const electricLevel = (props.electricLevel != null && props.electricLevel > 0)
-      ? props.electricLevel
-      : (props.socLevel ?? props.electric_level ?? (normalizedPacks.length > 0 ? packAverageSoc : (prevState.electricLevel ?? 0)))
+    let electricLevel = prevState.electricLevel ?? 0
+    if (props.electricLevel != null) {
+      electricLevel = props.electricLevel
+    } else if (props.socLevel != null) {
+      electricLevel = props.socLevel
+    } else if (props.electric_level != null) {
+      electricLevel = props.electric_level
+    } else if (Array.isArray(packs) && packs.length > 0) {
+      electricLevel = packAverageSoc
+    }
 
     const totalCapacityKwh = normalizedPacks.length > 0
       ? parseFloat(normalizedPacks.reduce((s, p) => s + p.capacityKwh, 0).toFixed(2))
@@ -222,7 +234,7 @@ export class ZendureDevice extends BaseDevice {
     this.setState(normalized)
     if (this.mqttPublishEnabled) {
       this.publishMqttDiscovery()
-      const slug = slugify(this.name || normalized.sn || this.id)
+      const slug = this.getMqttSlug()
       const stateTopic = `zendure-cloudless-${slug}/state`
       mqttService.publish(stateTopic, normalized, { retain: true })
     }
@@ -231,7 +243,7 @@ export class ZendureDevice extends BaseDevice {
 
   publishMqttDiscovery() {
     if (!this.mqttPublishEnabled) return
-    const slug = slugify(this.name || this.model || this.id)
+    const slug = this.getMqttSlug()
     const stateTopic = `zendure-cloudless-${slug}/state`
     const deviceId = slugify(this.id)
 

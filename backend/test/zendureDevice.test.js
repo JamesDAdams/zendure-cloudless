@@ -225,5 +225,84 @@ describe('ZendureDevice MQTT Publishing', () => {
       mqttService.publish = originalPublish
     }
   })
+
+  it('ensures MQTT discovery state_topic matches published state topic when device has no name', () => {
+    const device = new ZendureDevice({
+      id: 'zendure-12345',
+      ip: '192.168.1.100',
+      mqttPublishEnabled: true
+    })
+
+    const published = []
+    const originalPublish = mqttService.publish
+    mqttService.publish = (topic, payload, options) => {
+      published.push({ topic, payload, options })
+      return true
+    }
+
+    try {
+      device.applyMqttMessage('some/topic', Buffer.from(JSON.stringify({
+        properties: { solarInputPower: 300, electricLevel: 80 }
+      })))
+
+      const discoveryMsg = published.find((p) => p.topic.includes('/config'))
+      assert.ok(discoveryMsg, 'Expected discovery payload')
+      const discoveryStateTopic = discoveryMsg.payload.state_topic
+
+      const stateMsg = published.find((p) => p.topic.endsWith('/state'))
+      assert.ok(stateMsg, 'Expected state payload')
+      assert.equal(stateMsg.topic, discoveryStateTopic, 'Discovery state_topic must match state topic')
+    } finally {
+      mqttService.publish = originalPublish
+    }
+  })
+
+  it('prevents zeroing out electricLevel and power sensors during partial MQTT reports', () => {
+    const device = new ZendureDevice({
+      id: 'd10',
+      name: 'Partial Zero Test',
+      ip: '192.168.1.100',
+      mqttPublishEnabled: true
+    })
+
+    const published = []
+    const originalPublish = mqttService.publish
+    mqttService.publish = (topic, payload, options) => {
+      published.push({ topic, payload, options })
+      return true
+    }
+
+    try {
+      // 1. Initial report with 85% SOC
+      device.applyMqttMessage('some/topic', Buffer.from(JSON.stringify({
+        properties: { electricLevel: 85, solarInputPower: 400, outputHomePower: 200 }
+      })))
+
+      let stateMsg = published[published.length - 1]
+      assert.equal(stateMsg.payload.electricLevel, 85)
+      assert.equal(stateMsg.payload.solarPower, 400)
+      assert.equal(stateMsg.payload.outputHomePower, 200)
+
+      // 2. Partial report with electricLevel undefined (glitch) and only solarInputPower updated
+      device.applyMqttMessage('some/topic', Buffer.from(JSON.stringify({
+        properties: { solarInputPower: 450 }
+      })))
+
+      stateMsg = published[published.length - 1]
+      assert.equal(stateMsg.payload.electricLevel, 85, 'SOC should retain previous 85% when missing from partial update')
+      assert.equal(stateMsg.payload.solarPower, 450)
+      assert.equal(stateMsg.payload.outputHomePower, 200, 'outputHomePower should retain previous 200W')
+
+      // 3. Explicit 0% SOC report when battery is genuinely empty
+      device.applyMqttMessage('some/topic', Buffer.from(JSON.stringify({
+        properties: { electricLevel: 0 }
+      })))
+
+      stateMsg = published[published.length - 1]
+      assert.equal(stateMsg.payload.electricLevel, 0, 'Explicit 0% SOC should be accepted when battery is empty')
+    } finally {
+      mqttService.publish = originalPublish
+    }
+  })
 })
 
