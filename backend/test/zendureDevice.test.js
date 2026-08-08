@@ -19,6 +19,21 @@ describe('ZendureDevice.applyMqttMessage', () => {
     assert.equal(state.packs[0].sn, 'PACK1')
   })
 
+  it('parses flat property payloads and updates state', () => {
+    const device = new ZendureDevice({ id: 'd1-flat', name: 'Test Flat', ip: '127.0.0.1' })
+    const payload = JSON.stringify({
+      solarInputPower: 187,
+      outputHomePower: 156,
+      electricLevel: 50
+    })
+    device.applyMqttMessage('some/topic', Buffer.from(payload))
+    const state = device.getState()
+    assert.equal(state.solarInputPower, 187)
+    assert.equal(state.solarPower, 187)
+    assert.equal(state.outputHomePower, 156)
+    assert.equal(state.electricLevel, 50)
+  })
+
   it('ignores invalid JSON payload silently', () => {
     const device = new ZendureDevice({ id: 'd2', name: 'Test', ip: '127.0.0.1' })
     assert.doesNotThrow(() => device.applyMqttMessage('topic', Buffer.from('not json')))

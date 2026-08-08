@@ -70,7 +70,7 @@ export class ZendureDevice extends BaseDevice {
 
   processReport(raw) {
     const prevState = this.state || {}
-    const props = raw.properties || {}
+    const props = raw.properties || (raw.packData ? {} : raw)
     const packs = raw.packData
 
     const normalizedPacks = Array.isArray(packs)
@@ -118,19 +118,19 @@ export class ZendureDevice extends BaseDevice {
 
     const chargePower = props.outputPackPower !== undefined
       ? props.outputPackPower
-      : (prevState.batteryChargePower ?? prevState.outputPackPower ?? 0)
+      : (props.batteryChargePower ?? prevState.batteryChargePower ?? prevState.outputPackPower ?? 0)
 
     const dischargePower = props.packInputPower !== undefined
       ? props.packInputPower
-      : (prevState.batteryDischargePower ?? prevState.packInputPower ?? 0)
+      : (props.batteryDischargePower ?? prevState.batteryDischargePower ?? prevState.packInputPower ?? 0)
 
     const solarPower = props.solarInputPower !== undefined
       ? props.solarInputPower
-      : (prevState.solarInputPower ?? prevState.solarPower ?? 0)
+      : (props.solarPower ?? props.solar_power ?? prevState.solarInputPower ?? prevState.solarPower ?? 0)
 
     const outputHomePower = props.outputHomePower !== undefined
       ? props.outputHomePower
-      : (prevState.outputHomePower ?? 0)
+      : (props.home_power ?? prevState.outputHomePower ?? 0)
 
     const gridInputPower = props.gridInputPower !== undefined
       ? props.gridInputPower
@@ -285,12 +285,8 @@ export class ZendureDevice extends BaseDevice {
     if (this.mqttTopicPrefix && !topic.startsWith(this.mqttTopicPrefix)) return false
     try {
       const data = JSON.parse(payload.toString())
-      if (data.properties || data.packData) {
-        this.processReport(data)
-        return true
-      }
       if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
-        this.setState(data)
+        this.processReport(data)
         return true
       }
       return false

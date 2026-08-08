@@ -46,4 +46,20 @@ describe('historyService', () => {
     assert.ok(totals.batteryChargeEnergyKwh > 0.25 && totals.batteryChargeEnergyKwh < 0.35, `Expected ~0.3 kWh, got ${totals.batteryChargeEnergyKwh}`)
     assert.ok(totals.batteryDischargeEnergyKwh > 0.15 && totals.batteryDischargeEnergyKwh < 0.25, `Expected ~0.2 kWh, got ${totals.batteryDischargeEnergyKwh}`)
   })
+
+  it('updateEnergyTotals preserves small incremental updates without prematurely rounding DB value to 0', async () => {
+    const deviceId = 'dev-small-delta-test'
+    const { db } = await import('../src/db.js')
+    let currentTs = Date.now() - 50000
+    db.prepare('INSERT INTO energy_totals (device_id, solar_energy_kwh, output_home_energy_kwh, pack_input_energy_kwh, pack_charge_energy_kwh, pack_discharge_energy_kwh, last_ts) VALUES (?, ?, ?, ?, ?, ?, ?)').run(deviceId, 0, 0, 0, 0, 0, currentTs)
+
+    for (let i = 0; i < 10; i++) {
+      currentTs += 5000
+      historyService.updateEnergyTotals(deviceId, { solarPower: 187, outputHomePower: 156 }, currentTs)
+    }
+
+    const totals = historyService.getEnergyTotals(deviceId)
+    assert.ok(totals.solarEnergyKwh > 0, `Expected solarEnergyKwh > 0, got ${totals.solarEnergyKwh}`)
+    assert.ok(totals.outputHomeEnergyKwh > 0, `Expected outputHomeEnergyKwh > 0, got ${totals.outputHomeEnergyKwh}`)
+  })
 })

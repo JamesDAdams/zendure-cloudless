@@ -45,18 +45,17 @@ class HistoryService {
     const packChargeEnergyKwh = row ? (row.pack_charge_energy_kwh || 0) : 0
     const packDischargeEnergyKwh = row ? (row.pack_discharge_energy_kwh || row.pack_input_energy_kwh || 0) : 0
     return {
-      solarEnergyKwh,
-      outputHomeEnergyKwh,
-      packInputEnergyKwh,
-      packChargeEnergyKwh,
-      packDischargeEnergyKwh,
-      batteryChargeEnergyKwh: packChargeEnergyKwh,
-      batteryDischargeEnergyKwh: packDischargeEnergyKwh,
+      solarEnergyKwh: parseFloat(solarEnergyKwh.toFixed(6)),
+      outputHomeEnergyKwh: parseFloat(outputHomeEnergyKwh.toFixed(6)),
+      packInputEnergyKwh: parseFloat(packInputEnergyKwh.toFixed(6)),
+      packChargeEnergyKwh: parseFloat(packChargeEnergyKwh.toFixed(6)),
+      packDischargeEnergyKwh: parseFloat(packDischargeEnergyKwh.toFixed(6)),
+      batteryChargeEnergyKwh: parseFloat(packChargeEnergyKwh.toFixed(6)),
+      batteryDischargeEnergyKwh: parseFloat(packDischargeEnergyKwh.toFixed(6)),
     }
   }
 
-  updateEnergyTotals(deviceId, state) {
-    const now = Date.now()
+  updateEnergyTotals(deviceId, state, now = Date.now()) {
     const row = db.prepare('SELECT solar_energy_kwh, output_home_energy_kwh, pack_input_energy_kwh, pack_charge_energy_kwh, pack_discharge_energy_kwh, last_ts FROM energy_totals WHERE device_id = ?').get(deviceId)
 
     let solarEnergyKwh = row ? (row.solar_energy_kwh || 0) : 0
@@ -82,12 +81,6 @@ class HistoryService {
       }
     }
 
-    solarEnergyKwh = parseFloat(solarEnergyKwh.toFixed(3))
-    outputHomeEnergyKwh = parseFloat(outputHomeEnergyKwh.toFixed(3))
-    packInputEnergyKwh = parseFloat(packInputEnergyKwh.toFixed(3))
-    packChargeEnergyKwh = parseFloat(packChargeEnergyKwh.toFixed(3))
-    packDischargeEnergyKwh = parseFloat(packDischargeEnergyKwh.toFixed(3))
-
     db.prepare(`
       INSERT INTO energy_totals (device_id, solar_energy_kwh, output_home_energy_kwh, pack_input_energy_kwh, pack_charge_energy_kwh, pack_discharge_energy_kwh, last_ts)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -101,13 +94,13 @@ class HistoryService {
     `).run(deviceId, solarEnergyKwh, outputHomeEnergyKwh, packInputEnergyKwh, packChargeEnergyKwh, packDischargeEnergyKwh, now)
 
     return {
-      solarEnergyKwh,
-      outputHomeEnergyKwh,
-      packInputEnergyKwh,
-      packChargeEnergyKwh,
-      packDischargeEnergyKwh,
-      batteryChargeEnergyKwh: packChargeEnergyKwh,
-      batteryDischargeEnergyKwh: packDischargeEnergyKwh,
+      solarEnergyKwh: parseFloat(solarEnergyKwh.toFixed(6)),
+      outputHomeEnergyKwh: parseFloat(outputHomeEnergyKwh.toFixed(6)),
+      packInputEnergyKwh: parseFloat(packInputEnergyKwh.toFixed(6)),
+      packChargeEnergyKwh: parseFloat(packChargeEnergyKwh.toFixed(6)),
+      packDischargeEnergyKwh: parseFloat(packDischargeEnergyKwh.toFixed(6)),
+      batteryChargeEnergyKwh: parseFloat(packChargeEnergyKwh.toFixed(6)),
+      batteryDischargeEnergyKwh: parseFloat(packDischargeEnergyKwh.toFixed(6)),
     }
   }
 
