@@ -70,7 +70,7 @@ fi
 
 # 5. Verify local Docker build succeeds
 echo "[pre-push] Testing local Docker build..."
-if command -v docker >/dev/null 2>&1; then
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   if ! docker build -t zendure-cloudless:test-pre-push . ; then
     z_error "Local Docker build failed! Fix Dockerfile issues before pushing."
     FAILED=1
@@ -78,7 +78,7 @@ if command -v docker >/dev/null 2>&1; then
     z_success "Docker build check passed."
   fi
 else
-  echo "[pre-push] Docker CLI not found, skipping local Docker build check."
+  echo "[pre-push] Docker daemon not running or Docker CLI not found, skipping local Docker build check."
 fi
 
 if [ $FAILED -ne 0 ]; then
