@@ -11,17 +11,16 @@ RUN apk add --no-cache python3 make g++ \
 COPY frontend ./frontend
 RUN npm run build --workspace=frontend
 
+RUN npm prune --omit=dev --workspace=backend
+
 FROM node:22-alpine AS production
 
 WORKDIR /app
 COPY package*.json ./
 COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
-
-RUN apk add --no-cache python3 make g++ \
-    && npm install --workspace=backend --omit=dev \
-    && apk del python3 make g++
-
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/backend/node_modules ./backend/node_modules
 COPY backend ./backend
 COPY --from=builder /app/frontend/dist ./frontend/dist
 

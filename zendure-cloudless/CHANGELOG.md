@@ -2,6 +2,9 @@
 
 All notable changes to Zendure Cloudless Home Assistant Add-on will be documented in this file.
 
+## 1.0.9
+- Fixed Docker multi-architecture build failure (exit code 132 SIGILL) on ARM64 by sharing compiled native binaries from the builder stage.
+
 ## 1.0.8
 - Added changelog for Home Assistant Add-on Store UI.
 - Improved version discovery and update notification compatibility.
