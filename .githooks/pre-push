@@ -23,11 +23,6 @@ if [ "$pushing_to_main" = false ]; then
   exit 0
 fi
 
-if [ "$SKIP_VERSION_CHECK" = "1" ]; then
-  echo "[pre-push] SKIP_VERSION_CHECK=1 set, bypassing version check."
-  exit 0
-fi
-
 echo "[pre-push] Verifying version updates for push to main..."
 
 # Check if origin/main exists
