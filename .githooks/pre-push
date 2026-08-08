@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+# Git pre-push hook: ensure version bump in package.json, ha-addon/config.yaml, and docker-publish.yml when pushing to main
+
+z_error() {
+  echo -e "\033[0;31m[ERROR] $1\033[0m"
+}
+
+z_success() {
+  echo -e "\033[0;32m[SUCCESS] $1\033[0m"
+}
+
+pushing_to_main=false
+
+while read local_ref local_sha remote_ref remote_sha; do
+  if [[ "$remote_ref" == "refs/heads/main" || "$remote_ref" == "main" ]]; then
+    pushing_to_main=true
+    break
+  fi
+done
+
+if [ "$pushing_to_main" = false ]; then
+  exit 0
+fi
+
+if [ "$SKIP_VERSION_CHECK" = "1" ]; then
+  echo "[pre-push] SKIP_VERSION_CHECK=1 set, bypassing version check."
+  exit 0
+fi
+
+echo "[pre-push] Verifying version updates for push to main..."
+
+# Check if origin/main exists
+if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+  echo "[pre-push] origin/main not found, skipping version check."
+  exit 0
+fi
+
+# Fetch current package.json version
+PKG_VER=$(node -e "console.log(require('./package.json').version || '')" 2>/dev/null)
+ORIGIN_PKG_VER=$(git show origin/main:package.json 2>/dev/null | node -e "let data='';process.stdin.on('data',c=>data+=c);process.stdin.on('end',()=>console.log(JSON.parse(data).version||''))" 2>/dev/null)
+
+# Fetch current ha-addon/config.yaml version
+CONFIG_VER=$(grep -E '^version:' ha-addon/config.yaml | head -n1 | sed -E 's/version:[[:space:]]*"?([^"]+)"?/\1/' | tr -d '\r')
+ORIGIN_CONFIG_VER=$(git show origin/main:ha-addon/config.yaml 2>/dev/null | grep -E '^version:' | head -n1 | sed -E 's/version:[[:space:]]*"?([^"]+)"?/\1/' | tr -d '\r')
+
+# Check version tag in .github/workflows/docker-publish.yml
+DOCKER_HAS_VER=$(grep -F "type=raw,value=${PKG_VER}" .github/workflows/docker-publish.yml 2>/dev/null)
+
+FAILED=0
+
+# 1. package.json version must be updated compared to origin/main
+if [ "$PKG_VER" = "$ORIGIN_PKG_VER" ]; then
+  z_error "package.json version ($PKG_VER) has not been updated compared to origin/main ($ORIGIN_PKG_VER)."
+  FAILED=1
+fi
+
+# 2. ha-addon/config.yaml version must be updated compared to origin/main
+if [ "$CONFIG_VER" = "$ORIGIN_CONFIG_VER" ]; then
+  z_error "ha-addon/config.yaml version ($CONFIG_VER) has not been updated compared to origin/main ($ORIGIN_CONFIG_VER)."
+  FAILED=1
+fi
+
+# 3. package.json version and ha-addon/config.yaml version must match
+if [ "$PKG_VER" != "$CONFIG_VER" ]; then
+  z_error "Version mismatch! package.json ($PKG_VER) does not match ha-addon/config.yaml ($CONFIG_VER)."
+  FAILED=1
+fi
+
+# 4. .github/workflows/docker-publish.yml must contain the new version tag
+if [ -z "$DOCKER_HAS_VER" ]; then
+  z_error ".github/workflows/docker-publish.yml does not contain 'type=raw,value=${PKG_VER}'."
+  FAILED=1
+fi
+
+if [ $FAILED -ne 0 ]; then
+  echo ""
+  z_error "Push to main blocked! Please bump the version in package.json, ha-addon/config.yaml, and .github/workflows/docker-publish.yml before pushing."
+  exit 1
+fi
+
+z_success "Version checks passed (${PKG_VER}). Proceeding with push."
+exit 0
