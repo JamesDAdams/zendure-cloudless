@@ -1,6 +1,6 @@
 name: "Zendure Cloudless"
 description: "Self-hosted energy management dashboard for Zendure solar + battery systems"
-version: "1.0.10"
+version: "1.0.11"
 slug: "zendure-cloudless"
 init: false
 arch:

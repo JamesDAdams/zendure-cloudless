@@ -2,6 +2,9 @@
 
 All notable changes to Zendure Cloudless Home Assistant Add-on will be documented in this file.
 
+## 1.0.11
+- Added Docker daemon status check to git pre-push hook before executing local build verification.
+
 ## 1.0.10
 - Fixed Dockerfile node_modules path during multi-stage build.
 - Added local Docker build check in git pre-push hook to prevent pushing broken image configurations.
