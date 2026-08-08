@@ -63,12 +63,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
-            type=raw,value=1.0.5
-            type=raw,value=1.0.4
-            type=raw,value=1.0.3
-            type=raw,value=1.0.2
-            type=raw,value=1.0.1
-            type=raw,value=1.0.0
+            type=raw,value=1.0.6
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
