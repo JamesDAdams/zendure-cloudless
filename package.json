@@ -1,6 +1,6 @@
 {
   "name": "zendure-cloudless",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "workspaces": [
     "backend",
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "npm run build --workspace=frontend",
     "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
-    "prepare": "git config core.hooksPath .githooks",
+    "prepare": "git config core.hooksPath .githooks || true",
     "start": "npm run start --workspace=backend"
   },
   "devDependencies": {
