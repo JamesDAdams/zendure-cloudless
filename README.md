@@ -2,7 +2,7 @@
 
 Self-hosted local energy management dashboard and Home Assistant integration for Zendure SolarFlow systems.
 
-![Zendure Cloudless Logo](ha-addon/logo.png)
+![Zendure Cloudless Logo](zendure-cloudless/logo.png)
 
 ## Features
 

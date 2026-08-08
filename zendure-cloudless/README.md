@@ -5,17 +5,14 @@ Self-hosted energy management dashboard for Zendure solar + battery systems.
 ## Installation
 
 ### Option 1: Private GitHub Repository
-1. Generate a **Personal Access Token (PAT)** with `repo` scope on GitHub (Settings > Developer Settings > Personal Access Tokens).
-2. In Home Assistant, go to **Settings → Add-ons → Add-on Store → 3 dots (top-right) → Repositories**.
-3. Add the URL with your token:
-   `https://<YOUR_GITHUB_TOKEN>@github.com/JamesDAdams/zendure-cloudless`
-4. Install "Zendure Cloudless", configure, and start the add-on.
+
+> **Note:** Home Assistant&#39;s add-on store does not natively support authentication for private repositories. Embedding a token in the URL exposes it in browser history and server logs. The recommended approach is to make the repository public (Option 2) or use a local installation (Option 3).
 
 ---
 
 ### Option 2: Public GitHub Repository
 1. Ensure the repository visibility is set to **Public** on GitHub.
-2. In Home Assistant, go to **Settings → Add-ons → Add-on Store → 3 points → Repositories**.
+2. In Home Assistant, go to **Settings → Add-ons → Add-on Store → 3 dots (top-right) → Repositories**.
 3. Add the URL: `https://github.com/JamesDAdams/zendure-cloudless`
 4. Install "Zendure Cloudless" and start.
 
